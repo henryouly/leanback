@@ -1,12 +1,17 @@
 package com.github.henryouly.leanback;
 
+import com.google.android.gcm.GCMRegistrar;
+
+import com.github.henryouly.leanback.util.ServerUtilities;
 import com.github.henryouly.leanback.util.SystemUiHider;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -48,10 +53,19 @@ public class LeanBackActivity extends Activity {
    */
   private SystemUiHider mSystemUiHider;
 
+
+  AsyncTask<Void, Void, Void> mRegisterTask;
+  
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
 
+    // Make sure the device has the proper dependencies.
+    GCMRegistrar.checkDevice(this);
+    // Make sure the manifest was properly set - comment out this line
+    // while developing the app, then uncomment it when it's ready.
+    GCMRegistrar.checkManifest(this);
+    
     setContentView(R.layout.activity_lean_back);
 
     final View controlsView = findViewById(R.id.fullscreen_content_controls);
@@ -94,6 +108,8 @@ public class LeanBackActivity extends Activity {
           delayedHide(AUTO_HIDE_DELAY_MILLIS);
         }
       }
+      
+      
     });
 
     // Set up the user interaction to manually show or hide the system UI.
@@ -118,7 +134,6 @@ public class LeanBackActivity extends Activity {
         String packageName = "com.mxtech.videoplayer.ad";
         String dataUri = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4";
         String intentName = "android.intent.action.VIEW";
-        // Intent intent = new Intent(Intent.ACTION_VIEW);
         PackageManager packageManager = getPackageManager();
         Intent intent;
         if (intentName.length() > 0) {
@@ -137,6 +152,47 @@ public class LeanBackActivity extends Activity {
         startActivity(intent);
       }
     });
+    
+    final String regId = GCMRegistrar.getRegistrationId(this);
+    if (regId.equals("")) {
+        // Automatically registers application on startup.
+        GCMRegistrar.register(this, GCMIntentService.SENDER_ID);
+    } else {
+        // Device is already registered on GCM, check server.
+        if (GCMRegistrar.isRegisteredOnServer(this)) {
+            // Skips registration.
+        } else {
+            // Try to register again, but not in the UI thread.
+            // It's also necessary to cancel the thread onDestroy(),
+            // hence the use of AsyncTask instead of a raw thread.
+            final Context context = this;
+            mRegisterTask = new AsyncTask<Void, Void, Void>() {
+
+                @Override
+                protected Void doInBackground(Void... params) {
+                    boolean registered =
+                            ServerUtilities.register(context, regId);
+                    // At this point all attempts to register with the app
+                    // server failed, so we need to unregister the device
+                    // from GCM - the app will try to register again when
+                    // it is restarted. Note that GCM will send an
+                    // unregistered callback upon completion, but
+                    // GCMIntentService.onUnregistered() will ignore it.
+                    if (!registered) {
+                        GCMRegistrar.unregister(context);
+                    }
+                    return null;
+                }
+
+                @Override
+                protected void onPostExecute(Void result) {
+                    mRegisterTask = null;
+                }
+
+            };
+            mRegisterTask.execute(null, null, null);
+        }
+    }
   }
 
   @Override
