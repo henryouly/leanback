@@ -7,8 +7,10 @@ import com.github.henryouly.leanback.util.SystemUiHider;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -52,6 +54,9 @@ public class LeanBackActivity extends Activity {
    * The instance of the {@link SystemUiHider} for this activity.
    */
   private SystemUiHider mSystemUiHider;
+  
+  private GCMReceiver mHandleMessageReceiver;
+  private IntentFilter mOnMessageFilter;
 
 
   AsyncTask<Void, Void, Void> mRegisterTask;
@@ -59,6 +64,10 @@ public class LeanBackActivity extends Activity {
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    
+    mHandleMessageReceiver = new GCMReceiver();
+    mOnMessageFilter = new IntentFilter();
+    mOnMessageFilter.addAction(Constants.ACTION_ON_MESSAGE);
 
     // Make sure the device has the proper dependencies.
     GCMRegistrar.checkDevice(this);
@@ -131,32 +140,16 @@ public class LeanBackActivity extends Activity {
     findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
-        String packageName = "com.mxtech.videoplayer.ad";
-        String dataUri = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4";
-        String intentName = "android.intent.action.VIEW";
-        PackageManager packageManager = getPackageManager();
-        Intent intent;
-        if (intentName.length() > 0) {
-          intent = new Intent(intentName);
-        } else {
-          intent = packageManager.getLaunchIntentForPackage(packageName);
-        }
-        Uri uri = Uri.parse(dataUri);
-        String dataType = "video/*";
-        if (dataType.length() > 0) {
-          intent.setDataAndType(uri, dataType);          
-        } else {
-          intent.setData(uri);
-        }
-        intent.setPackage(packageName);
-        startActivity(intent);
+        //String dataUri = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4";
+        //MediaPlayer.streamFrom(this, dataUri);
+        finish();
       }
     });
     
     final String regId = GCMRegistrar.getRegistrationId(this);
     if (regId.equals("")) {
         // Automatically registers application on startup.
-        GCMRegistrar.register(this, GCMIntentService.SENDER_ID);
+        GCMRegistrar.register(this, Constants.SENDER_ID);
     } else {
         // Device is already registered on GCM, check server.
         if (GCMRegistrar.isRegisteredOnServer(this)) {
@@ -193,6 +186,8 @@ public class LeanBackActivity extends Activity {
             mRegisterTask.execute(null, null, null);
         }
     }
+    
+    registerReceiver(mHandleMessageReceiver, mOnMessageFilter);
   }
 
   @Override
@@ -206,6 +201,16 @@ public class LeanBackActivity extends Activity {
   }
 
 
+  @Override
+  protected void onDestroy() {
+      if (mRegisterTask != null) {
+          mRegisterTask.cancel(true);
+      }
+      unregisterReceiver(mHandleMessageReceiver);
+      GCMRegistrar.onDestroy(this);
+      super.onDestroy();
+  }
+  
   /**
    * Touch listener to use for in-layout UI controls to delay hiding the system UI. This is to
    * prevent the jarring behavior of controls going away while interacting with activity UI.
@@ -234,5 +239,30 @@ public class LeanBackActivity extends Activity {
   private void delayedHide(int delayMillis) {
     mHideHandler.removeCallbacks(mHideRunnable);
     mHideHandler.postDelayed(mHideRunnable, delayMillis);
+  }
+  
+  private class GCMReceiver extends BroadcastReceiver {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+      String dataUri = intent.getStringExtra(Constants.FIELD_MESSAGE);
+      String packageName = "com.mxtech.videoplayer.ad";
+      String intentName = "android.intent.action.VIEW";
+      PackageManager packageManager = getPackageManager();
+      Intent launchIntent;
+      if (intentName.length() > 0) {
+        launchIntent = new Intent(intentName);
+      } else {
+        launchIntent = packageManager.getLaunchIntentForPackage(packageName);
+      }
+      Uri uri = Uri.parse(dataUri);
+      String dataType = "video/*";
+      if (dataType.length() > 0) {
+        launchIntent.setDataAndType(uri, dataType);          
+      } else {
+        launchIntent.setData(uri);
+      }
+      launchIntent.setPackage(packageName);
+      startActivity(launchIntent);
+    }
   }
 }

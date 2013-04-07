@@ -35,12 +35,11 @@ import java.util.Random;
  * Helper class used to communicate with the demo server.
  */
 public final class ServerUtilities {
-
     private static final String TAG = ServerUtilities.class.getSimpleName();
     private static final int MAX_ATTEMPTS = 5;
     private static final int BACKOFF_MILLI_SECONDS = 2000;
     private static final Random random = new Random();
-    private static final String SERVER_URL = "";
+    private static final String SERVER_URL = "http://tvleanback.appspot.com";
 
     /**
      * Register this account/device pair within the server.
@@ -51,7 +50,7 @@ public final class ServerUtilities {
         Log.i(TAG, "registering device (regId = " + regId + ")");
         String serverUrl = SERVER_URL + "/register";
         Map<String, String> params = new HashMap<String, String>();
-        params.put("regId", regId);
+        params.put("reg_id", regId);
         long backoff = BACKOFF_MILLI_SECONDS + random.nextInt(1000);
         // Once GCM returns a registration id, we need to register it in the
         // demo server. As the server might be down, we will retry it a couple
@@ -93,7 +92,7 @@ public final class ServerUtilities {
         Log.i(TAG, "unregistering device (regId = " + regId + ")");
         String serverUrl = SERVER_URL + "/unregister";
         Map<String, String> params = new HashMap<String, String>();
-        params.put("regId", regId);
+        params.put("reg_id", regId);
         try {
             post(serverUrl, params);
             GCMRegistrar.setRegisteredOnServer(context, false);
