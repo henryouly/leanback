@@ -4,6 +4,9 @@ import com.github.henryouly.leanback.util.SystemUiHider;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -109,6 +112,31 @@ public class LeanBackActivity extends Activity {
     // operations to prevent the jarring behavior of controls going away
     // while interacting with the UI.
     findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
+    findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
+      @Override
+      public void onClick(View view) {
+        String packageName = "com.mxtech.videoplayer.ad";
+        String dataUri = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4";
+        String intentName = "android.intent.action.VIEW";
+        // Intent intent = new Intent(Intent.ACTION_VIEW);
+        PackageManager packageManager = getPackageManager();
+        Intent intent;
+        if (intentName.length() > 0) {
+          intent = new Intent(intentName);
+        } else {
+          intent = packageManager.getLaunchIntentForPackage(packageName);
+        }
+        Uri uri = Uri.parse(dataUri);
+        String dataType = "video/*";
+        if (dataType.length() > 0) {
+          intent.setDataAndType(uri, dataType);          
+        } else {
+          intent.setData(uri);
+        }
+        intent.setPackage(packageName);
+        startActivity(intent);
+      }
+    });
   }
 
   @Override
