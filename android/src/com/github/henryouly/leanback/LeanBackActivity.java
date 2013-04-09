@@ -141,8 +141,16 @@ public class LeanBackActivity extends Activity {
       @Override
       public void onClick(View view) {
         //String dataUri = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4";
-        //MediaPlayer.streamFrom(this, dataUri);
-        finish();
+        new AsyncTask<Void, Void, Void>() {
+
+          @Override
+          protected Void doInBackground(Void... params) {
+              final Context context = LeanBackActivity.this;
+              GCMRegistrar.unregister(context);
+              return null;
+          }
+
+      }.execute(null, null, null);
       }
     });
     
@@ -207,7 +215,7 @@ public class LeanBackActivity extends Activity {
           mRegisterTask.cancel(true);
       }
       unregisterReceiver(mHandleMessageReceiver);
-      GCMRegistrar.onDestroy(this);
+      GCMRegistrar.onDestroy(getApplicationContext());
       super.onDestroy();
   }
   

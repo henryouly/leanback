@@ -21,10 +21,6 @@ import android.content.Context;
 import android.util.Log;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -102,6 +98,7 @@ public final class ServerUtilities {
             // We could try to unregister again, but it is not necessary:
             // if the server tries to send a message to the device, it will get
             // a "NotRegistered" error message and should unregister the device.
+            e.printStackTrace();
         }
     }
 
@@ -115,14 +112,9 @@ public final class ServerUtilities {
      */
     private static void post(String endpoint, Map<String, String> params)
             throws IOException {
-        URL url;
-        try {
-            url = new URL(endpoint);
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("invalid url: " + endpoint);
-        }
         StringBuilder bodyBuilder = new StringBuilder();
         Iterator<Entry<String, String>> iterator = params.entrySet().iterator();
+        
         // constructs the POST body using the parameters
         while (iterator.hasNext()) {
             Entry<String, String> param = iterator.next();
@@ -133,26 +125,18 @@ public final class ServerUtilities {
             }
         }
         String body = bodyBuilder.toString();
-        Log.v(TAG, "Posting '" + body + "' to " + url);
-        byte[] bytes = body.getBytes();
-        HttpURLConnection conn = null;
+        
+        GAEHttpsConnection conn = null;
         try {
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setDoOutput(true);
-            conn.setUseCaches(false);
-            conn.setFixedLengthStreamingMode(bytes.length);
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type",
-                    "application/x-www-form-urlencoded;charset=UTF-8");
-            // post the request
-            OutputStream out = conn.getOutputStream();
-            out.write(bytes);
-            out.close();
-            // handle the response
-            int status = conn.getResponseCode();
-            if (status != 200) {
-              throw new IOException("Post failed with error code " + status);
-            }
+          conn = new GAEHttpsConnection();
+          conn.connect();
+          conn.request("GET", endpoint + "?" + body);
+          int status = conn.getStatusCode();
+          if (status != 200) {
+            throw new IOException("Post failed with error code " + status);
+          }
+        } catch (Exception e) {
+          e.printStackTrace();
         } finally {
             if (conn != null) {
                 conn.disconnect();
