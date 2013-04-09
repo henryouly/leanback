@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
+import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
 public class DNSResolver {
@@ -31,11 +32,11 @@ public class DNSResolver {
     "www.google.com", "www.l.google.com", "mail.google.com", "mail.l.google.com",
     "mail-china.l.google.com"
   };
-  
-  private final InetAddress[] mGoogleIpList;
+  private static final String GOOGLE_CN_VALID_IP_PREFIX = "203.208.";
   private static final int MAX_TRY = 3;
+  private static final int SSL_REQUEST_TIME_THRESHOLD = 768 * 1000000;
   
-  private static final String BLACKLIST_IP[] = new String[] {
+  private static final List<String> BLACKLIST_IP = Arrays.asList(new String[] {
                    // for ipv6
                    "1.1.1.1", "255.255.255.255",
                    // for google+
@@ -49,15 +50,19 @@ public class DNSResolver {
                    "46.82.174.68", "59.24.3.173", "64.33.88.161", "64.33.99.47",
                    "64.66.163.251", "65.104.202.252", "65.160.219.113", "66.45.252.237",
                    "72.14.205.104", "72.14.205.99", "78.16.49.15", "8.7.198.45", "93.46.8.89",
-                   };
-
+                   });
+  
+  private final Random mRandom = new Random(System.currentTimeMillis());
+  private final SocketFactory mSocketFactory = SSLSocketFactory.getDefault();
+  private final InetAddress[] mGoogleIpList;
+  
   public DNSResolver() {
     Set<InetAddress> ipList = null;
     try {
       ipList = resolveIpListFromDomain(GOOGLE_CN_DOMAIN_LIST);
       for (Iterator<InetAddress> iter = ipList.iterator(); iter.hasNext();) {
-        byte[] address = iter.next().getAddress();
-        if (address[0] != (byte) 203 || address[1] != (byte) 208) {
+        String address = iter.next().getHostAddress();
+        if (!address.startsWith(GOOGLE_CN_VALID_IP_PREFIX)) {
           iter.remove();
         }
       }
@@ -71,7 +76,7 @@ public class DNSResolver {
       }
       int averageTime = SpeedTest(ipList);
       Log.d(TAG, "Speed test google_cn iplist avg: " + averageTime  + " ms");
-      if (averageTime > 768 * 1000000) {
+      if (averageTime > SSL_REQUEST_TIME_THRESHOLD) {
         ipList = resolveIpListFromDomain(GOOGLE_HK_DOMAIN_LIST);
       }
     } catch (Exception e) {
@@ -96,12 +101,11 @@ public class DNSResolver {
   }
   
   private int SpeedTest(Set<InetAddress> ipList) throws IOException {
-    Socket socket = SSLSocketFactory.getDefault().createSocket();
+    Socket socket = mSocketFactory.createSocket();
     socket.setSoTimeout(2000);
-    Random random = new Random(System.currentTimeMillis());
     List<InetAddress> testIps = new ArrayList<InetAddress>(ipList);
     Collections.shuffle(testIps);
-    int testIpNum = Math.min(4, random.nextInt(testIps.size() + 1));
+    int testIpNum = Math.min(4, mRandom.nextInt(testIps.size() + 1));
     testIps = testIps.subList(0, testIpNum);
 
     int totalTime = 0;
@@ -121,10 +125,8 @@ public class DNSResolver {
 
   private boolean hasBadIp(InetAddress[] address) {
     for (InetAddress addr: address) {
-      for (String badIp: BLACKLIST_IP) {
-        if (addr.getHostAddress() == badIp) {
-          return true;
-        }
+      if (BLACKLIST_IP.contains(addr.getHostAddress())) {
+        return true;
       }
     }
     return false;
