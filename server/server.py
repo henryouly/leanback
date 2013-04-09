@@ -59,6 +59,20 @@ class Main(webapp2.RequestHandler):
 
 
 class RegisterHandler(webapp2.RequestHandler):
+  """
+    Stores the registration ids sent via the 'reg_id' parameter
+
+    Sample request:
+    curl http://localhost:8080/register?reg_id=test_id
+  """
+  def get(self):
+    global reg_id_set
+    if 'reg_id' in self.request.GET and len(self.request.GET['reg_id']) > 0:
+      reg_id_set.add(self.request.GET['reg_id'])
+      self.response.set_status(200)
+      return
+    self.response.set_status(400)
+
   def post(self):
     """
       Stores the registration ids sent via the 'reg_id' parameter
@@ -69,6 +83,36 @@ class RegisterHandler(webapp2.RequestHandler):
     global reg_id_set
     if 'reg_id' in self.request.POST and len(self.request.POST['reg_id']) > 0:
       reg_id_set.add(self.request.POST['reg_id'])
+      self.response.set_status(200)
+      return
+    self.response.set_status(400)
+
+
+class UnregisterHandler(webapp2.RequestHandler):
+  """
+    Stores the registration ids sent via the 'reg_id' parameter
+
+    Sample request:
+    curl http://localhost:8080/unregister?reg_id=test_id
+  """
+  def get(self):
+    global reg_id_set
+    if 'reg_id' in self.request.GET and len(self.request.GET['reg_id']) > 0:
+      reg_id_set.remove(self.request.GET['reg_id'])
+      self.response.set_status(200)
+      return
+    self.response.set_status(400)
+
+  def post(self):
+    """
+      Stores the registration ids sent via the 'reg_id' parameter
+
+      Sample request:
+      curl -d "reg_id=test_id" http://localhost:8080/unregister
+    """
+    global reg_id_set
+    if 'reg_id' in self.request.POST and len(self.request.POST['reg_id']) > 0:
+      reg_id_set.remove(self.request.POST['reg_id'])
       self.response.set_status(200)
       return
     self.response.set_status(400)
@@ -168,4 +212,5 @@ class SendHandler(webapp2.RequestHandler):
 
 app = webapp2.WSGIApplication([('/', Main),
                                ('/send', SendHandler),
-                               ('/register', RegisterHandler)], debug=True)
+                               ('/register', RegisterHandler),
+                               ('/unregister', UnregisterHandler)], debug=True)
