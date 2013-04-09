@@ -2,26 +2,38 @@ package com.github.henryouly.leanback.util;
 
 import android.util.Log;
 
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
+
+import javax.net.ssl.SSLSocketFactory;
 
 public class DNSResolver {
   private static final String TAG = DNSResolver.class.getSimpleName();
   private static final String[] GOOGLE_CN_DOMAIN_LIST = {
     "www.google.cn", "www.g.cn"
   };
-  
-  private final InetAddress[] mGoogleIpList;
-  private static final int MAX_TRY = 3;
-
-  private static final String[] GOOGLE_CN_IP_LIST = new String[] {
+  private static final String[] GOOGLE_CN_IP_PREDEFINE_LIST = new String[] {
     "203.208.46.131", "203.208.46.132", "203.208.46.133", "203.208.46.134",
     "203.208.46.135", "203.208.46.136", "203.208.46.137", "203.208.46.138",
   };
+  private static final String[] GOOGLE_HK_DOMAIN_LIST = {
+    "www.google.com", "www.l.google.com", "mail.google.com", "mail.l.google.com",
+    "mail-china.l.google.com"
+  };
+  
+  private final InetAddress[] mGoogleIpList;
+  private static final int MAX_TRY = 3;
   
   private static final String BLACKLIST_IP[] = new String[] {
                    // for ipv6
@@ -39,30 +51,74 @@ public class DNSResolver {
                    "72.14.205.104", "72.14.205.99", "78.16.49.15", "8.7.198.45", "93.46.8.89",
                    };
 
-  
   public DNSResolver() {
-    Set<InetAddress> ipList = new HashSet<InetAddress>();
+    Set<InetAddress> ipList = null;
     try {
-      for (String googleIp: GOOGLE_CN_IP_LIST) {
-        InetAddress address = InetAddress.getByName(googleIp);
-        ipList.add(address);
-      }
-      for (String domain: GOOGLE_CN_DOMAIN_LIST) {
-        for (int i = 0; i < MAX_TRY; i++) {
-            InetAddress[] address = InetAddress.getAllByName(domain);
-            if (address.length > 1 && !hasBadIp(address)) {
-              ipList.addAll(Arrays.asList(address));
-              break;
-            }
+      ipList = resolveIpListFromDomain(GOOGLE_CN_DOMAIN_LIST);
+      for (Iterator<InetAddress> iter = ipList.iterator(); iter.hasNext();) {
+        byte[] address = iter.next().getAddress();
+        if (address[0] != (byte) 203 || address[1] != (byte) 208) {
+          iter.remove();
         }
       }
-    } catch (UnknownHostException e) {
+      if (ipList.size() <= GOOGLE_CN_DOMAIN_LIST.length) {
+        // Maybe all are fake IPs by DNS poison, using predefined list.
+        ipList.clear();
+        for (String googleIp: GOOGLE_CN_IP_PREDEFINE_LIST) {
+          InetAddress address = InetAddress.getByName(googleIp);
+          ipList.add(address);
+        }
+      }
+      int averageTime = SpeedTest(ipList);
+      Log.d(TAG, "Speed test google_cn iplist avg: " + averageTime  + " ms");
+      if (averageTime > 768 * 1000000) {
+        ipList = resolveIpListFromDomain(GOOGLE_HK_DOMAIN_LIST);
+      }
+    } catch (Exception e) {
       e.printStackTrace();
     }
     mGoogleIpList = ipList.toArray(new InetAddress[0]);
     Log.d(TAG, "The google ip list: " + Arrays.toString(mGoogleIpList));
   }
+
+  private Set<InetAddress> resolveIpListFromDomain(String[] domains) throws UnknownHostException {
+    Set<InetAddress> ipList = new HashSet<InetAddress>();
+    for (String domain: domains) {
+      for (int i = 0; i < MAX_TRY; i++) {
+          InetAddress[] address = InetAddress.getAllByName(domain);
+          if (address.length > 1 && !hasBadIp(address)) {
+            ipList.addAll(Arrays.asList(address));
+            break;
+          }
+      }
+    }
+    return ipList;
+  }
   
+  private int SpeedTest(Set<InetAddress> ipList) throws IOException {
+    Socket socket = SSLSocketFactory.getDefault().createSocket();
+    socket.setSoTimeout(2000);
+    Random random = new Random(System.currentTimeMillis());
+    List<InetAddress> testIps = new ArrayList<InetAddress>(ipList);
+    Collections.shuffle(testIps);
+    int testIpNum = Math.min(4, random.nextInt(testIps.size() + 1));
+    testIps = testIps.subList(0, testIpNum);
+
+    int totalTime = 0;
+    try {
+      for (InetAddress target: testIps) {
+        long start = System.currentTimeMillis();
+        socket.connect(new InetSocketAddress(target, 443));
+        socket.close();
+        long end = System.currentTimeMillis();
+        totalTime += end - start;
+      }
+    } catch (IOException e) {
+       totalTime = Integer.MAX_VALUE;
+    }
+    return totalTime / testIpNum;
+  }
+
   private boolean hasBadIp(InetAddress[] address) {
     for (InetAddress addr: address) {
       for (String badIp: BLACKLIST_IP) {
