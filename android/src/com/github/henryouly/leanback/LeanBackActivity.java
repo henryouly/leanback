@@ -1,24 +1,17 @@
 package com.github.henryouly.leanback;
 
-import com.google.android.gcm.GCMRegistrar;
-
-import com.github.henryouly.leanback.util.ServerUtilities;
-import com.github.henryouly.leanback.util.SystemUiHider;
-
 import android.annotation.TargetApi;
 import android.app.Activity;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+
+import com.github.henryouly.leanback.util.SystemUiHider;
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e. status bar and
@@ -27,6 +20,7 @@ import android.view.View;
  * @see SystemUiHider
  */
 public class LeanBackActivity extends Activity {
+  private static final String TAG = LeanBackActivity.class.getSimpleName();
   /**
    * Whether or not the system UI should be auto-hidden after {@link #AUTO_HIDE_DELAY_MILLIS}
    * milliseconds.
@@ -55,25 +49,9 @@ public class LeanBackActivity extends Activity {
    */
   private SystemUiHider mSystemUiHider;
   
-  private GCMReceiver mHandleMessageReceiver;
-  private IntentFilter mOnMessageFilter;
-
-
-  AsyncTask<Void, Void, Void> mRegisterTask;
-  
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    
-    mHandleMessageReceiver = new GCMReceiver();
-    mOnMessageFilter = new IntentFilter();
-    mOnMessageFilter.addAction(Constants.ACTION_ON_MESSAGE);
-
-    // Make sure the device has the proper dependencies.
-    GCMRegistrar.checkDevice(this);
-    // Make sure the manifest was properly set - comment out this line
-    // while developing the app, then uncomment it when it's ready.
-    GCMRegistrar.checkManifest(this);
     
     setContentView(R.layout.activity_lean_back);
 
@@ -117,8 +95,6 @@ public class LeanBackActivity extends Activity {
           delayedHide(AUTO_HIDE_DELAY_MILLIS);
         }
       }
-      
-      
     });
 
     // Set up the user interaction to manually show or hide the system UI.
@@ -136,66 +112,36 @@ public class LeanBackActivity extends Activity {
     // Upon interacting with UI controls, delay any scheduled hide()
     // operations to prevent the jarring behavior of controls going away
     // while interacting with the UI.
-    findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
-    findViewById(R.id.dummy_button).setOnClickListener(new View.OnClickListener() {
+    findViewById(R.id.start_button).setOnTouchListener(mDelayHideTouchListener);
+    findViewById(R.id.stop_button).setOnTouchListener(mDelayHideTouchListener);
+    findViewById(R.id.start_button).setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View view) {
         //String dataUri = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4";
         new AsyncTask<Void, Void, Void>() {
-
           @Override
           protected Void doInBackground(Void... params) {
-              final Context context = LeanBackActivity.this;
-              GCMRegistrar.unregister(context);
-              return null;
+            Intent service = new Intent(LeanBackActivity.this, LeanbackService.class);
+            LeanBackActivity.this.startService(service);              
+            return null;
           }
-
       }.execute(null, null, null);
       }
     });
-    
-    final String regId = GCMRegistrar.getRegistrationId(this);
-    if (regId.equals("")) {
-        // Automatically registers application on startup.
-        GCMRegistrar.register(this, Constants.SENDER_ID);
-    } else {
-        // Device is already registered on GCM, check server.
-        if (GCMRegistrar.isRegisteredOnServer(this)) {
-            // Skips registration.
-        } else {
-            // Try to register again, but not in the UI thread.
-            // It's also necessary to cancel the thread onDestroy(),
-            // hence the use of AsyncTask instead of a raw thread.
-            final Context context = this;
-            mRegisterTask = new AsyncTask<Void, Void, Void>() {
-
-                @Override
-                protected Void doInBackground(Void... params) {
-                    boolean registered =
-                            ServerUtilities.register(context, regId);
-                    // At this point all attempts to register with the app
-                    // server failed, so we need to unregister the device
-                    // from GCM - the app will try to register again when
-                    // it is restarted. Note that GCM will send an
-                    // unregistered callback upon completion, but
-                    // GCMIntentService.onUnregistered() will ignore it.
-                    if (!registered) {
-                        GCMRegistrar.unregister(context);
-                    }
-                    return null;
-                }
-
-                @Override
-                protected void onPostExecute(Void result) {
-                    mRegisterTask = null;
-                }
-
-            };
-            mRegisterTask.execute(null, null, null);
-        }
-    }
-    
-    registerReceiver(mHandleMessageReceiver, mOnMessageFilter);
+    findViewById(R.id.stop_button).setOnClickListener(new View.OnClickListener() {
+      @Override
+      public void onClick(View view) {
+        new AsyncTask<Void, Void, Void>() {
+          @Override
+          protected Void doInBackground(Void... params) {
+            Intent service = new Intent(LeanBackActivity.this, LeanbackService.class);
+            boolean ret = LeanBackActivity.this.stopService(service);
+            Log.d(TAG, "stopService: " + ret);
+            return null;
+          }
+      }.execute(null, null, null);
+      }
+    });
   }
 
   @Override
@@ -206,17 +152,6 @@ public class LeanBackActivity extends Activity {
     // created, to briefly hint to the user that UI controls
     // are available.
     delayedHide(100);
-  }
-
-
-  @Override
-  protected void onDestroy() {
-      if (mRegisterTask != null) {
-          mRegisterTask.cancel(true);
-      }
-      unregisterReceiver(mHandleMessageReceiver);
-      GCMRegistrar.onDestroy(getApplicationContext());
-      super.onDestroy();
   }
   
   /**
@@ -247,30 +182,5 @@ public class LeanBackActivity extends Activity {
   private void delayedHide(int delayMillis) {
     mHideHandler.removeCallbacks(mHideRunnable);
     mHideHandler.postDelayed(mHideRunnable, delayMillis);
-  }
-  
-  private class GCMReceiver extends BroadcastReceiver {
-    @Override
-    public void onReceive(Context context, Intent intent) {
-      String dataUri = intent.getStringExtra(Constants.FIELD_MESSAGE);
-      String packageName = "com.mxtech.videoplayer.ad";
-      String intentName = "android.intent.action.VIEW";
-      PackageManager packageManager = getPackageManager();
-      Intent launchIntent;
-      if (intentName.length() > 0) {
-        launchIntent = new Intent(intentName);
-      } else {
-        launchIntent = packageManager.getLaunchIntentForPackage(packageName);
-      }
-      Uri uri = Uri.parse(dataUri);
-      String dataType = "video/*";
-      if (dataType.length() > 0) {
-        launchIntent.setDataAndType(uri, dataType);          
-      } else {
-        launchIntent.setData(uri);
-      }
-      launchIntent.setPackage(packageName);
-      startActivity(launchIntent);
-    }
   }
 }

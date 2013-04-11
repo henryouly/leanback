@@ -22,6 +22,8 @@
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
     <!-- Keeps the processor from sleeping when a message is received. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
@@ -58,6 +60,14 @@
                 <category android:name="com.github.henryouly.leanback" />
             </intent-filter>
         </receiver>
+        
+        <receiver
+            android:name=".LeanbackReceiver" >
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="com.github.henryouly.leanback.ON_MESSAGE" />
+            </intent-filter>
+        </receiver>
 
         <!--
           Application-specific subclass of GCMBaseIntentService that will
@@ -67,6 +77,9 @@
           application uses a custom BroadcastReceiver that redefines its name.
         -->
         <service android:name=".GCMIntentService" />
+
+        <service android:name=".LeanbackService" />
+        
     </application>
 
 </manifest>
