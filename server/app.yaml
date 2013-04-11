@@ -7,3 +7,6 @@ threadsafe: true
 handlers:
 - url: /.*
   script: server.app
+
+builtins:
+- datastore_admin: on

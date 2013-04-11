@@ -4,7 +4,11 @@ import sys
 import urllib2
 import webapp2
 
-reg_id_set = set()
+from google.appengine.ext import db
+
+class RegisterEntry(db.Model):
+  reg_id = db.StringProperty()
+
 
 class Main(webapp2.RequestHandler):
   def get(self):
@@ -12,9 +16,7 @@ class Main(webapp2.RequestHandler):
        Show all the registered devices, with a form the send them a
     message.
     """
-    global reg_id_set
-
-    reg_id_list = list(reg_id_set)
+    reg_id_list = list(entry.reg_id for entry in RegisterEntry.all().run())
 
     html = """
 <html>
@@ -59,19 +61,14 @@ class Main(webapp2.RequestHandler):
 
 
 class RegisterHandler(webapp2.RequestHandler):
-  """
-    Stores the registration ids sent via the 'reg_id' parameter
-
-    Sample request:
-    curl http://localhost:8080/register?reg_id=test_id
-  """
   def get(self):
-    global reg_id_set
-    if 'reg_id' in self.request.GET and len(self.request.GET['reg_id']) > 0:
-      reg_id_set.add(self.request.GET['reg_id'])
-      self.response.set_status(200)
-      return
-    self.response.set_status(400)
+    """
+      Stores the registration ids sent via the 'reg_id' parameter
+
+      Sample request:
+      curl http://localhost:8080/register?reg_id=test_id
+    """
+    self._handle(self.request.GET)
 
   def post(self):
     """
@@ -80,28 +77,27 @@ class RegisterHandler(webapp2.RequestHandler):
       Sample request:
       curl -d "reg_id=test_id" http://localhost:8080/register
     """
-    global reg_id_set
-    if 'reg_id' in self.request.POST and len(self.request.POST['reg_id']) > 0:
-      reg_id_set.add(self.request.POST['reg_id'])
+    self._handle(self.request.POST)
+
+  def _handle(self, param):
+    if 'reg_id' in param and len(param['reg_id']) > 0:
+      entry = RegisterEntry(key_name=param['reg_id'])
+      entry.reg_id = param['reg_id']
+      entry.put()
       self.response.set_status(200)
       return
     self.response.set_status(400)
 
 
 class UnregisterHandler(webapp2.RequestHandler):
-  """
-    Stores the registration ids sent via the 'reg_id' parameter
-
-    Sample request:
-    curl http://localhost:8080/unregister?reg_id=test_id
-  """
   def get(self):
-    global reg_id_set
-    if 'reg_id' in self.request.GET and len(self.request.GET['reg_id']) > 0:
-      reg_id_set.remove(self.request.GET['reg_id'])
-      self.response.set_status(200)
-      return
-    self.response.set_status(400)
+    """
+      Stores the registration ids sent via the 'reg_id' parameter
+
+      Sample request:
+      curl http://localhost:8080/unregister?reg_id=test_id
+    """
+    self._handle(self.request.GET)
 
   def post(self):
     """
@@ -110,9 +106,12 @@ class UnregisterHandler(webapp2.RequestHandler):
       Sample request:
       curl -d "reg_id=test_id" http://localhost:8080/unregister
     """
-    global reg_id_set
-    if 'reg_id' in self.request.POST and len(self.request.POST['reg_id']) > 0:
-      reg_id_set.remove(self.request.POST['reg_id'])
+    self._handle(self.request.POST)
+
+  def _handle(self, param):
+    if 'reg_id' in param and len(param['reg_id']) > 0:
+      key_addr = db.Key.from_path('RegisterEntry', param['reg_id'])
+      db.delete(key_addr)
       self.response.set_status(200)
       return
     self.response.set_status(400)
@@ -133,7 +132,6 @@ class SendHandler(webapp2.RequestHandler):
   """
   def post(self):
     from api_key import API_KEY
-    global reg_id_set
 
     msg = self.request.get('msg', default_value='Greetings from the cloud!')
     reg_id_list = None
@@ -142,7 +140,7 @@ class SendHandler(webapp2.RequestHandler):
 
     if reg_id_list is None:
       sys.stderr.write('Sending message to all registered devices\n')
-      reg_id_list = list(reg_id_set)
+      reg_id_list = list(entry.reg_id for entry in RegisterEntry.all().run())
 
     data = {
       'registration_ids' : reg_id_list,
@@ -191,9 +189,9 @@ class SendHandler(webapp2.RequestHandler):
     <h3>Per device</h3>
     <ol>""" % (repr(data), json_string)
 
-    reg_id_list = data['registration_ids']
-    for i in xrange(len(reg_id_list)):
-      reg_id = reg_id_list[i]
+    _reg_id_list = data['registration_ids']
+    for i in xrange(len(_reg_id_list)):
+      reg_id = _reg_id_list[i]
       result = json_response['results'][i]
 
       html += """
@@ -201,8 +199,11 @@ class SendHandler(webapp2.RequestHandler):
           reg_id: <code>%s</code><br/>
           <pre>%s</pre>
         </li>""" % (reg_id, json.dumps(result))
+      if result['error'] == "NoRegistered" or result['error'] == "InvalidRegistration":
+        key_addr = db.Key.from_path(RegisterEntry.kind(), reg_id.encode('utf-8'))
+        db.delete(key_addr)
 
-      html += """
+    html += """
     </ol>
     <a href="/">Back</a>
   </body>
