@@ -199,9 +199,10 @@ class SendHandler(webapp2.RequestHandler):
           reg_id: <code>%s</code><br/>
           <pre>%s</pre>
         </li>""" % (reg_id, json.dumps(result))
-      if result['error'] == "NoRegistered" or result['error'] == "InvalidRegistration":
-        key_addr = db.Key.from_path(RegisterEntry.kind(), reg_id.encode('utf-8'))
-        db.delete(key_addr)
+      if 'error' in result:
+        if result['error'] == "NoRegistered" or result['error'] == "InvalidRegistration":
+          key_addr = db.Key.from_path(RegisterEntry.kind(), reg_id.encode('utf-8'))
+          db.delete(key_addr)
 
     html += """
     </ol>
